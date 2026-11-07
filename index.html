@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Residential Power Rate Board</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      }
+
+      body {
+        margin: 0;
+        background: #0f172a;
+        color: #e2e8f0;
+        min-height: 100vh;
+      }
+
+      .app {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      h1 {
+        margin-top: 0;
+        font-size: 1.9rem;
+      }
+
+      .search-row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      input,
+      button {
+        border-radius: 10px;
+        border: 1px solid #334155;
+        padding: 12px 14px;
+        font-size: 1rem;
+      }
+
+      input {
+        flex: 1;
+        min-width: 230px;
+        background: #111827;
+        color: #e5e7eb;
+      }
+
+      button {
+        cursor: pointer;
+        background: #2563eb;
+        color: white;
+        border: none;
+      }
+
+      .hint {
+        color: #94a3b8;
+        margin: 10px 0 18px;
+        font-size: 0.95rem;
+      }
+
+      .meta {
+        margin-bottom: 12px;
+      }
+
+      .board {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 8px;
+      }
+
+      .slot {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 10px;
+        padding: 10px;
+        opacity: 0;
+        transform: translateY(8px);
+        animation: rollOut 0.5s ease forwards;
+      }
+
+      @keyframes rollOut {
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .rate {
+        font-weight: 700;
+        color: #93c5fd;
+        margin-top: 4px;
+      }
+
+      .refs {
+        margin-top: 16px;
+        padding-left: 18px;
+      }
+
+      .refs a {
+        color: #93c5fd;
+      }
+
+      .error {
+        color: #fca5a5;
+        margin-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <h1>Residential Power Rate Interactive Board</h1>
+      <div class="search-row">
+        <input id="cityInput" type="text" placeholder="Enter city (Toronto, New York, Hong Kong, Macau, Shanghai)" />
+        <button id="searchBtn" type="button">Show hourly rates</button>
+      </div>
+      <p class="hint">Supports city names in Canada, USA, Hong Kong, Macau, and China.</p>
+
+      <section id="result"></section>
+      <p id="error" class="error" aria-live="polite"></p>
+    </main>
+
+    <script>
+      const monthNames = ["Jan.", "Feb.", "Mar.", "Apr.", "May.", "Jun.", "Jul.", "Aug.", "Sep.", "Oct.", "Nov.", "Dec."];
+
+      const toOrdinal = (day) => {
+        if (day % 100 >= 11 && day % 100 <= 13) return `${day}th`;
+        if (day % 10 === 1) return `${day}st`;
+        if (day % 10 === 2) return `${day}nd`;
+        if (day % 10 === 3) return `${day}rd`;
+        return `${day}th`;
+      };
+
+      const formatDate = (date) => `${monthNames[date.getMonth()]} ${toOrdinal(date.getDate())}, ${date.getFullYear()}`;
+
+      const flatRates = (rate) => Array.from({ length: 24 }, (_, hour) => ({ hour, rate, period: "Flat rate" }));
+
+      const data = [
+        {
+          city: "Toronto",
+          aliases: ["toronto", "ontario"],
+          region: "Canada",
+          unit: "CAD/kWh",
+          effective: "Nov. 1, 2026",
+          getRates: (date) => {
+            const isWeekend = [0, 6].includes(date.getDay());
+            if (isWeekend) return Array.from({ length: 24 }, (_, hour) => ({ hour, rate: 0.091, period: "Off-peak" }));
+            return Array.from({ length: 24 }, (_, hour) => {
+              if (hour < 7 || hour >= 19) return { hour, rate: 0.091, period: "Off-peak" };
+              if ((hour >= 7 && hour < 11) || (hour >= 17 && hour < 19)) return { hour, rate: 0.189, period: "On-peak" };
+              return { hour, rate: 0.146, period: "Mid-peak" };
+            });
+          },
+          refs: [
+            {
+              label: "Ontario Energy Board: Electricity rates (Regulated Price Plan)",
+              url: "https://www.oeb.ca/rates-and-your-bill/electricity-rates"
+            }
+          ]
+        },
+        {
+          city: "New York",
+          aliases: ["new york", "new york city", "nyc", "manhattan", "brooklyn"],
+          region: "USA",
+          unit: "USD/kWh",
+          effective: "2026 Con Edison TOU schedule",
+          getRates: (date) => {
+            const isSummer = date.getMonth() >= 5 && date.getMonth() <= 8;
+            return Array.from({ length: 24 }, (_, hour) => {
+              if (hour < 8) return { hour, rate: 0.0522, period: "Off-peak" };
+              return { hour, rate: isSummer ? 0.2786 : 0.1711, period: "Peak" };
+            });
+          },
+          refs: [
+            {
+              label: "Con Edison: Time-of-Use rates",
+              url: "https://www.coned.com/en/accounts-billing/your-bill/time-of-use"
+            }
+          ]
+        },
+        {
+          city: "Hong Kong",
+          aliases: ["hong kong", "hk"],
+          region: "Hong Kong",
+          unit: "HKD/kWh",
+          effective: "2026 CLP residential tariff",
+          getRates: () => flatRates(1.339),
+          refs: [
+            {
+              label: "CLP Power: Residential tariff (energy charge + fuel cost adjustment)",
+              url: "https://www.clp.com.hk/zh/customer-service/tariff-and-fees/residential-tariff/"
+            }
+          ]
+        },
+        {
+          city: "Macau",
+          aliases: ["macau", "macao"],
+          region: "Macau",
+          unit: "MOP/kWh",
+          effective: "CEM Tariff Group A + tariff clause adjustment",
+          getRates: () => flatRates(0.994),
+          refs: [
+            {
+              label: "CEM Macau: Tariff Group A",
+              url: "https://www.cem-macau.com/en/customer-service/billing-service/tariff-group-a/"
+            }
+          ]
+        },
+        {
+          city: "Shanghai",
+          aliases: ["shanghai", "china", "cn"],
+          region: "China",
+          unit: "CNY/kWh",
+          effective: "Shanghai residential TOU guide (2026)",
+          getRates: () =>
+            Array.from({ length: 24 }, (_, hour) => {
+              if (hour >= 6 && hour < 22) return { hour, rate: 0.641, period: "Peak" };
+              return { hour, rate: 0.331, period: "Off-peak" };
+            }),
+          refs: [
+            {
+              label: "Shanghai Development and Reform Commission pricing guide",
+              url: "https://www.shanghai.gov.cn/nw17239/20260114/b5cee01929564ca58a645ee5f6bbb125.html"
+            }
+          ]
+        }
+      ];
+
+      const findCity = (input) => {
+        const key = input.trim().toLowerCase();
+        if (!key) return null;
+        return data.find((entry) => entry.aliases.some((alias) => key.includes(alias)));
+      };
+
+      const hourLabel = (hour) => `${String(hour).padStart(2, "0")}:00 - ${String((hour + 1) % 24).padStart(2, "0")}:00`;
+
+      const render = () => {
+        const query = document.getElementById("cityInput").value;
+        const match = findCity(query);
+        const result = document.getElementById("result");
+        const error = document.getElementById("error");
+        result.innerHTML = "";
+        error.textContent = "";
+
+        if (!match) {
+          error.textContent = "City not found. Try Toronto, New York, Hong Kong, Macau, or Shanghai.";
+          return;
+        }
+
+        const today = new Date();
+        const hourlyRates = match.getRates(today);
+
+        const board = hourlyRates
+          .map(
+            ({ hour, rate, period }, index) =>
+              `<article class="slot" style="animation-delay:${index * 35}ms">
+                <div>${hourLabel(hour)}</div>
+                <div class="rate">${rate.toFixed(3)} ${match.unit}</div>
+                <small>${period}</small>
+              </article>`
+          )
+          .join("");
+
+        const refs = match.refs.map((ref) => `<li><a href="${ref.url}" target="_blank" rel="noopener noreferrer">${ref.label}</a></li>`).join("");
+
+        result.innerHTML = `
+          <div class="meta"><strong>${match.city}, ${match.region}</strong></div>
+          <div class="meta">Date: ${formatDate(today)}</div>
+          <div class="meta">Rate basis: ${match.effective}</div>
+          <section class="board" aria-label="Hourly residential power rates">${board}</section>
+          <ul class="refs"><li><strong>Reference source(s):</strong></li>${refs}</ul>
+        `;
+      };
+
+      document.getElementById("searchBtn").addEventListener("click", render);
+      document.getElementById("cityInput").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") render();
+      });
+    </script>
+  </body>
+</html>
