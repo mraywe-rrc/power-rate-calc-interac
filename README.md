@@ -12,5 +12,5 @@ Open `/home/runner/work/power-rate-calc-interac/power-rate-calc-interac/index.ht
 - Animated hourly rate board by time of day
 - Current date format like `Nov. 7th, 2026`
 - Real tariff-based rates with source references shown in the UI
-- Interactive monthly calculator sheet rows A2:D145 for gas and EV cumulative scenarios
+- Interactive monthly calculator sheet rows A2:D145 for gas and EV cumulative scenarios, with editable gas price, kWh rate, insurance, electricity factors, and down payments
 - Local gas-liter price is auto-filled from selected city/profile with reference source

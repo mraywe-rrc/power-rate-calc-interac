@@ -202,12 +202,40 @@
             Local kWh rate (from selected city, editable)
             <input id="kwhRateInput" type="number" min="0" step="0.001" value="0" />
           </label>
+          <label>
+            Gas monthly insurance
+            <input id="gasInsuranceInput" type="number" min="0" step="0.01" value="125" />
+          </label>
+          <label>
+            EV RWD monthly insurance
+            <input id="rwdInsuranceInput" type="number" min="0" step="0.01" value="500" />
+          </label>
+          <label>
+            EV RWD down payment
+            <input id="rwdDownpaymentInput" type="number" min="0" step="0.01" value="3094" />
+          </label>
+          <label>
+            EV RWD electricity factor
+            <input id="rwdElectrInput" type="number" min="0" step="0.01" value="1000" />
+          </label>
+          <label>
+            EV AWD monthly insurance
+            <input id="awdInsuranceInput" type="number" min="0" step="0.01" value="600" />
+          </label>
+          <label>
+            EV AWD down payment
+            <input id="awdDownpaymentInput" type="number" min="0" step="0.01" value="3927" />
+          </label>
+          <label>
+            EV AWD electricity factor
+            <input id="awdElectrInput" type="number" min="0" step="0.01" value="1000" />
+          </label>
         </div>
         <button id="recalcBtn" type="button">Recalculate sheet</button>
         <div class="formula">
-          Gas: B2 = 1200 + 125, B(n) = 142 × gasPrice + 125 + B(n-1).<br />
-          EV C: C2 = 1000 × kWh + 500 + 55878 - 15000 + 3094, C(n) = 1000 × kWh + 500 + C(n-1).<br />
-          EV D: D2 = 1000 × kWh + 500 + 55878 - 15000 + 3927, D(n) = 1000 × kWh + 500 + D(n-1).
+          Gas: B2 = 142 × gasPrice + gas insurance, B(n) = 142 × gasPrice + gas insurance + B(n-1).<br />
+          EV C (RWD): C2 = electr_RWD × kWh + insurance_RWD + 55878 - 15000 + downpayment_RWD, C(n) = electr_RWD × kWh + insurance_RWD + C(n-1).<br />
+          EV D (AWD): D2 = electr_AWD × kWh + insurance_AWD + 55878 - 15000 + downpayment_AWD, D(n) = electr_AWD × kWh + insurance_AWD + D(n-1).
         </div>
         <div id="sheetSummary" class="meta"></div>
         <div class="table-wrap">
@@ -217,8 +245,8 @@
                 <th>Sheet Row</th>
                 <th>A (Month)</th>
                 <th>B (Gas cumulative)</th>
-                <th>C (EV cumulative +3094)</th>
-                <th>D (EV cumulative +3927)</th>
+                <th>C (EV RWD cumulative)</th>
+                <th>D (EV AWD cumulative)</th>
               </tr>
             </thead>
             <tbody id="sheetBody"></tbody>
@@ -702,28 +730,38 @@
       let activeHourlyRates = [];
 
       const averageRate = (rates) => rates.reduce((sum, row) => sum + row.rate, 0) / rates.length;
+      const readNonNegativeInput = (id) => {
+        const value = Number(document.getElementById(id).value);
+        return Number.isFinite(value) && value >= 0 ? value : 0;
+      };
 
       const renderSheet = () => {
         if (!activeCity || !activeHourlyRates.length) return;
-        const gasPrice = Number(document.getElementById("gasPriceInput").value);
-        const kwhRate = Number(document.getElementById("kwhRateInput").value);
-        const safeGasPrice = Number.isFinite(gasPrice) && gasPrice >= 0 ? gasPrice : 0;
-        const safeKwhRate = Number.isFinite(kwhRate) && kwhRate >= 0 ? kwhRate : 0;
+        const safeGasPrice = readNonNegativeInput("gasPriceInput");
+        const safeKwhRate = readNonNegativeInput("kwhRateInput");
+        const gasInsurance = readNonNegativeInput("gasInsuranceInput");
+        const rwdInsurance = readNonNegativeInput("rwdInsuranceInput");
+        const rwdDownpayment = readNonNegativeInput("rwdDownpaymentInput");
+        const rwdElectr = readNonNegativeInput("rwdElectrInput");
+        const awdInsurance = readNonNegativeInput("awdInsuranceInput");
+        const awdDownpayment = readNonNegativeInput("awdDownpaymentInput");
+        const awdElectr = readNonNegativeInput("awdElectrInput");
         const rows = [];
         const maxMonth = 144;
-        const gasBase = 142 * safeGasPrice + 125;
-        const evMonthly = 1000 * safeKwhRate + 500;
-        const evBaseC = evMonthly + 55878 - 15000 + 3094;
-        const evBaseD = evMonthly + 55878 - 15000 + 3927;
-        let gasCumulative = 1200 + 125;
+        const gasMonthly = 142 * safeGasPrice + gasInsurance;
+        const rwdMonthly = rwdElectr * safeKwhRate + rwdInsurance;
+        const awdMonthly = awdElectr * safeKwhRate + awdInsurance;
+        const evBaseC = rwdMonthly + 55878 - 15000 + rwdDownpayment;
+        const evBaseD = awdMonthly + 55878 - 15000 + awdDownpayment;
+        let gasCumulative = gasMonthly;
         let evCumulativeC = evBaseC;
         let evCumulativeD = evBaseD;
 
         for (let month = 1; month <= maxMonth; month += 1) {
           if (month > 1) {
-            gasCumulative += gasBase;
-            evCumulativeC += evMonthly;
-            evCumulativeD += evMonthly;
+            gasCumulative += gasMonthly;
+            evCumulativeC += rwdMonthly;
+            evCumulativeD += awdMonthly;
           }
           const sheetRow = month + 1;
           rows.push(`
