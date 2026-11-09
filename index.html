@@ -108,6 +108,75 @@
         color: #fca5a5;
         margin-top: 10px;
       }
+
+      .calc {
+        margin-top: 20px;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        background: #111827;
+        padding: 14px;
+      }
+
+      .calc h2 {
+        margin: 0 0 10px;
+        font-size: 1.1rem;
+      }
+
+      .calc-controls {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        margin-bottom: 12px;
+      }
+
+      .calc-controls label {
+        display: grid;
+        gap: 4px;
+        font-size: 0.9rem;
+        color: #cbd5e1;
+      }
+
+      .calc button {
+        width: fit-content;
+      }
+
+      .formula {
+        color: #94a3b8;
+        font-size: 0.85rem;
+        margin: 10px 0;
+      }
+
+      .table-wrap {
+        overflow: auto;
+        max-height: 420px;
+        border: 1px solid #334155;
+        border-radius: 10px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 780px;
+      }
+
+      th,
+      td {
+        padding: 8px;
+        border-bottom: 1px solid #334155;
+        text-align: right;
+        white-space: nowrap;
+      }
+
+      th:first-child,
+      td:first-child,
+      th:nth-child(2),
+      td:nth-child(2) {
+        text-align: left;
+      }
+
+      .hidden {
+        display: none;
+      }
     </style>
   </head>
   <body>
@@ -121,6 +190,41 @@
 
       <section id="result"></section>
       <p id="error" class="error" aria-live="polite"></p>
+
+      <section id="calcSection" class="calc hidden">
+        <h2>Interactive Monthly Sheet Calculator (A2:D145)</h2>
+        <div class="calc-controls">
+          <label>
+            Local gas price (per liter)
+            <input id="gasPriceInput" type="number" min="0" step="0.001" value="1.5" />
+          </label>
+          <label>
+            Local kWh rate (from selected city, editable)
+            <input id="kwhRateInput" type="number" min="0" step="0.001" value="0" />
+          </label>
+        </div>
+        <button id="recalcBtn" type="button">Recalculate sheet</button>
+        <div class="formula">
+          Gas: B2 = 1200 + 125, B(n) = 142 × gasPrice + 125 + B(n-1).<br />
+          EV C: C2 = 1000 × kWh + 500 + 55878 - 15000 + 3094, C(n) = 1000 × kWh + 500 + C(n-1).<br />
+          EV D: D2 = 1000 × kWh + 500 + 55878 - 15000 + 3927, D(n) = 1000 × kWh + 500 + D(n-1).
+        </div>
+        <div id="sheetSummary" class="meta"></div>
+        <div class="table-wrap">
+          <table aria-label="Monthly calculation sheet rows A2 to D145">
+            <thead>
+              <tr>
+                <th>Sheet Row</th>
+                <th>A (Month)</th>
+                <th>B (Gas cumulative)</th>
+                <th>C (EV cumulative +3094)</th>
+                <th>D (EV cumulative +3927)</th>
+              </tr>
+            </thead>
+            <tbody id="sheetBody"></tbody>
+          </table>
+        </div>
+      </section>
     </main>
 
     <script>
@@ -236,14 +340,59 @@
       };
 
       const hourLabel = (hour) => `${String(hour).padStart(2, "0")}:00 - ${String((hour + 1) % 24).padStart(2, "0")}:00`;
+      const currency3 = (value) => Number(value).toFixed(3);
+      let activeCity = null;
+      let activeHourlyRates = [];
+
+      const averageRate = (rates) => rates.reduce((sum, row) => sum + row.rate, 0) / rates.length;
+
+      const renderSheet = () => {
+        if (!activeCity || !activeHourlyRates.length) return;
+        const gasPrice = Number(document.getElementById("gasPriceInput").value);
+        const kwhRate = Number(document.getElementById("kwhRateInput").value);
+        const safeGasPrice = Number.isFinite(gasPrice) && gasPrice >= 0 ? gasPrice : 0;
+        const safeKwhRate = Number.isFinite(kwhRate) && kwhRate >= 0 ? kwhRate : 0;
+        const rows = [];
+        const maxMonth = 144;
+        const gasBase = 142 * safeGasPrice + 125;
+        const evMonthly = 1000 * safeKwhRate + 500;
+        const evBaseC = evMonthly + 55878 - 15000 + 3094;
+        const evBaseD = evMonthly + 55878 - 15000 + 3927;
+        let gasCumulative = 1200 + 125;
+        let evCumulativeC = evBaseC;
+        let evCumulativeD = evBaseD;
+
+        for (let month = 1; month <= maxMonth; month += 1) {
+          if (month > 1) {
+            gasCumulative += gasBase;
+            evCumulativeC += evMonthly;
+            evCumulativeD += evMonthly;
+          }
+          const sheetRow = month + 1;
+          rows.push(`
+            <tr>
+              <td>${sheetRow}</td>
+              <td>${month}</td>
+              <td>${currency3(gasCumulative)}</td>
+              <td>${currency3(evCumulativeC)}</td>
+              <td>${currency3(evCumulativeD)}</td>
+            </tr>
+          `);
+        }
+
+        document.getElementById("sheetBody").innerHTML = rows.join("");
+        document.getElementById("sheetSummary").textContent = `Using ${activeCity.city} ${activeCity.unit} average kWh rate ${currency3(safeKwhRate)} and gas liter price ${currency3(safeGasPrice)}.`;
+      };
 
       const render = () => {
         const query = document.getElementById("cityInput").value;
         const match = findCity(query);
         const result = document.getElementById("result");
         const error = document.getElementById("error");
+        const calcSection = document.getElementById("calcSection");
         result.innerHTML = "";
         error.textContent = "";
+        calcSection.classList.add("hidden");
 
         if (!match) {
           error.textContent = "City not found. Try Toronto, New York, Hong Kong, Macau, or Shanghai.";
@@ -273,12 +422,19 @@
           <section class="board" aria-label="Hourly residential power rates">${board}</section>
           <ul class="refs"><li><strong>Reference source(s):</strong></li>${refs}</ul>
         `;
+
+        activeCity = match;
+        activeHourlyRates = hourlyRates;
+        document.getElementById("kwhRateInput").value = currency3(averageRate(hourlyRates));
+        calcSection.classList.remove("hidden");
+        renderSheet();
       };
 
       document.getElementById("searchBtn").addEventListener("click", render);
       document.getElementById("cityInput").addEventListener("keydown", (event) => {
         if (event.key === "Enter") render();
       });
+      document.getElementById("recalcBtn").addEventListener("click", renderSheet);
     </script>
   </body>
 </html>

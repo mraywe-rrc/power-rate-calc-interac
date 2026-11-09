@@ -12,3 +12,4 @@ Open `/home/runner/work/power-rate-calc-interac/power-rate-calc-interac/index.ht
 - Animated hourly rate board by time of day
 - Current date format like `Nov. 7th, 2026`
 - Real tariff-based rates with source references shown in the UI
+- Interactive monthly calculator sheet rows A2:D145 for gas and EV cumulative scenarios
